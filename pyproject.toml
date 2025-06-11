@@ -3,7 +3,7 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "your-lib"
+name = "LeanRAG"
 version = "0.1.0"
 description = "Vector-based premise selection for Lean 4"
 readme = "README.md"
