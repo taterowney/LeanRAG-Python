@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "your-lib"
+version = "0.1.0"
+description = "Vector-based premise selection for Lean 4"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [{ name = "Tate Rowney", email = "spam@taterowney.com" }]
+dependencies = [
+    "langchain>=0.3.25",
+    "langchain-chroma>=0.2.4",
+    "langchain-community>=0.3.24",
+    "langchain-core>=0.3.64",
+    "langchain-huggingface>=0.2.0",
+    "langchain-text-splitters>=0.3.8"
+]
