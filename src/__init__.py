@@ -71,33 +71,31 @@ def get_decls_from_plaintext(text):
 
 
 def load_lean(modules):
-
     paths = []
-    cmd = "find .lake/packages/ -type f -name '*.lean'"
+    cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
     lake_packages = subprocess.run(
         cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
     ).stdout.split("\n")
+
     lake_packages = {
-        "/".join(p.split(".lake/packages/")[1].split("/")[1:]) : os.path.join(os.getcwd(), p) for p in lake_packages
+        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(os.getcwd(), p) for p in lake_packages
     }
-    for m in modules:
+    while modules:
+        m = modules.pop(0)
         as_path = m.replace(".", "/")
         if os.path.exists(os.path.join(os.getcwd(), as_path + ".lean")):
             paths.append(os.path.join(os.getcwd(), as_path + ".lean"))
+        # elif "./lake/packages/" + as_path + ".lean" in lake_packages.keys():
         elif as_path + ".lean" in lake_packages.keys():
             paths.append(lake_packages[as_path + ".lean"])
 
         # Handle directories
         if os.path.exists(os.path.join(os.getcwd(), as_path)):
-            for root, _, files in os.walk(os.path.join(os.getcwd(), as_path)):
-                for file in files:
-                    if file.endswith(".lean"):
-                        paths.append(os.path.join(root, file))
+            for file in os.listdir(os.path.join(os.getcwd(), as_path)):
+                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
         elif as_path in lake_packages.keys():
-            for root, _, files in os.walk(lake_packages[as_path]):
-                for file in files:
-                    if file.endswith(".lean"):
-                        paths.append(os.path.join(root, file))
+            for file in os.listdir(lake_packages[as_path]):
+                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
 
     paths = list(set(paths))
 
