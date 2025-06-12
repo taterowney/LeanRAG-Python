@@ -6,8 +6,8 @@ from .LeanIO import check_leanRAG_installation
 # from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 # from langchain_core.documents import Document
 
-from utils import load_annotated_goal_state_theorems, load_plain_theorems
-from annotate import get_goal_annotations
+from .utils import load_annotated_goal_state_theorems, load_plain_theorems
+from .annotate import get_goal_annotations
 
 class __version__:
     def __init__(self, version):
