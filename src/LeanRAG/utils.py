@@ -2,7 +2,7 @@ import os, re, subprocess, asyncio, multiprocessing, json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from annotate import get_goal_annotations
+from .annotate import get_goal_annotations
 
 
 def get_decls_from_plaintext(text):

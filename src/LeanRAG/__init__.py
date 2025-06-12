@@ -1,7 +1,7 @@
 import os, json, subprocess, re
 import time
 
-from LeanIO import check_leanRAG_installation
+from .LeanIO import check_leanRAG_installation
 # from langchain_chroma import Chroma
 # from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 # from langchain_core.documents import Document

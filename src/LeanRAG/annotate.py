@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from LeanIO import run_lean_command, check_leanRAG_installation
+from .LeanIO import run_lean_command, check_leanRAG_installation
 
 #TODO: make everything else actually work with async
 async def get_goal_annotations_async(
