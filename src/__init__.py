@@ -1,10 +1,13 @@
-# from retrieve import get_database_retriever
 import os, json, subprocess, re
 import time
 
-from langchain_chroma import Chroma
-from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from langchain_core.documents import Document
+from LeanIO import check_leanRAG_installation
+# from langchain_chroma import Chroma
+# from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+# from langchain_core.documents import Document
+
+from utils import load_annotated_goal_state_theorems, load_plain_theorems
+from annotate import get_goal_annotations
 
 class __version__:
     def __init__(self, version):
@@ -14,99 +17,9 @@ class __version__:
         return self.version
 __version__ = __version__("0.1.0")
 
-def get_decls_from_plaintext(text):
-    """
-    Extract declarations from a plaintext Lean file.
-    This function assumes that declarations are separated by newlines.
-    """
-
-    lines = text.splitlines(keepends=True)
-
-    # Match lines like:
-    #   theorem …
-    #   @[simp] lemma …
-    #   @[attr1][@attr2] def …
-    decl_re = re.compile(r'^\s*(?:@\[[^\]]*\]\s*)*(theorem|lemma|example|problem|def)\b')
-
-    # find every line index where a target decl begins
-    decl_starts = [i for i, ln in enumerate(lines) if decl_re.match(ln)]
-
-    blocks = []
-    for idx, start in enumerate(decl_starts):
-        end = decl_starts[idx + 1] if idx + 1 < len(decl_starts) else len(lines)
-
-        # walk backwards to include any preceding comments or attributes
-        j = start - 1
-        while j >= 0 and lines[j].strip() == "":
-            j -= 1
-        while j >= 0 and (lines[j].lstrip().startswith('--')
-                          or lines[j].lstrip().startswith('@['))\
-                          or lines[j].lstrip().startswith('/--'):
-            j -= 1
-
-        block_lines = lines[j + 1:end]
-
-        # compute the indentation of the declaration line
-        # indent = re.match(r'^(\s*)', lines[start]).group(1)
-        # decl_indent = len(indent.expandtabs())
-
-        # now trim off any trailing blank lines or `end …` at ≤ that indent
-        if not block_lines:
-            continue
-
-        has_started = False
-        for i, line in enumerate(block_lines):
-            if decl_re.match(line):
-                has_started = True
-                continue
-            if has_started and not line.startswith("  "):
-                break
-        block_lines = block_lines[:i]
-
-        if block_lines:
-            if "".join(block_lines).strip():
-                blocks.append("".join(block_lines).strip())
-
-    return blocks
-
-
-def load_lean(modules):
-    paths = []
-    cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
-    lake_packages = subprocess.run(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
-    ).stdout.split("\n")
-
-    lake_packages = {
-        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(os.getcwd(), p) for p in lake_packages
-    }
-    while modules:
-        m = modules.pop(0)
-        as_path = m.replace(".", "/")
-        if os.path.exists(os.path.join(os.getcwd(), as_path + ".lean")):
-            paths.append(os.path.join(os.getcwd(), as_path + ".lean"))
-        # elif "./lake/packages/" + as_path + ".lean" in lake_packages.keys():
-        elif as_path + ".lean" in lake_packages.keys():
-            paths.append(lake_packages[as_path + ".lean"])
-
-        # Handle directories
-        if os.path.exists(os.path.join(os.getcwd(), as_path)):
-            for file in os.listdir(os.path.join(os.getcwd(), as_path)):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-        elif as_path in lake_packages.keys():
-            for file in os.listdir(lake_packages[as_path]):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-
-    paths = list(set(paths))
-
-    for path in paths:
-        assert os.path.exists(path), f"File {path} does not exist. Tate made an oopsie"
-        with open(path, "r") as f:
-            for decl in get_decls_from_plaintext(f.read()):
-                yield decl
 
 class Retriever:
-    def __init__(self, modules=(), database_path=None, model=None, preprocess=load_lean):
+    def __init__(self, modules=(), database_path=None, model=None, preprocess=load_plain_theorems(["Mathlib"])):
 
         if not database_path:
             if not model or not preprocess:
@@ -225,3 +138,7 @@ class Retriever:
 
         results = retriever.invoke(query)
         return results
+
+# if __name__ == "__main__":
+#     check_leanRAG_installation(project_dir="../../test_project")
+#     print(get_goal_annotations("Mathlib.Algebra.AddConstMap.Basic", project_dir="../../test_project"))
