@@ -136,14 +136,14 @@ def load_plain_theorems_(modules, project_dir=Path.cwd()):
             for decl in get_decls_from_plaintext(f.read()):
                 yield decl
 
-def load_annotated_goal_state_theorems(modules, project_dir=Path.cwd()):
+def load_annotated_goal_statements(modules, project_dir=Path.cwd()):
     """
     Load theorems from annotated goal state files. Delays evaluation.
     """
 
     return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
 
-def load_annotated_goal_state_theorems_(modules, project_dir=Path.cwd()):
+def load_annotated_goal_statements_(modules, project_dir=Path.cwd()):
     """
     Load theorems from annotated goal state files.
     """
@@ -173,6 +173,23 @@ def load_annotated_goal_state_theorems_(modules, project_dir=Path.cwd()):
                         yield j
             except Exception as e:
                 print(f"Error processing module: {e}")
+
+def is_theorem(statement):
+    decl_re = re.compile(r'^\s*(?:@\[[^\]]*\]\s*)*(theorem|lemma|example|problem|def)\b')
+    if decl_re.match(statement):
+        return True
+
+def load_annotated_goal_state_theorems(modules, project_dir=Path.cwd()):
+    """
+    Load theorems from annotated goal state files. Delays evaluation.
+    """
+
+    return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
+
+def load_annotated_goal_state_theorems_(modules, project_dir=Path.cwd()):
+    for statement in load_annotated_goal_statements_(modules, project_dir=project_dir):
+        if is_theorem(statement["decl"]):
+            yield statement
 
 # if __name__ == "__main__":
 #     for decl in load_annotated_goal_state_theorems(["Mathlib.Algebra.Group"], project_dir="../../test_project/"):
