@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .annotate import get_goal_annotations
 from .LeanIO import check_leanRAG_installation
 
-
 def get_decls_from_plaintext(text):
     """
     Extract declarations from a plaintext Lean file.
@@ -61,39 +60,6 @@ def get_decls_from_plaintext(text):
 
     return blocks
 
-def get_all_modules(modules, project_dir=Path.cwd()):
-    """
-    Get all modules (actual lean files) from a list of module paths that are possibly modules, possibly directories
-    """
-    out = []
-    cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
-    project_dir = Path(project_dir).resolve()
-    lake_packages = subprocess.run(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=project_dir
-    ).stdout.split("\n")
-
-    lake_packages = {
-        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(project_dir, p) for p in lake_packages
-    }
-
-    while modules:
-        m = modules.pop(0)
-        as_path = m.replace(".", "/")
-        if os.path.exists(os.path.join(project_dir, as_path + ".lean")):
-            out.append(m)
-        elif as_path + ".lean" in lake_packages.keys():
-            out.append(m)
-
-        # Handle directories
-        if os.path.exists(os.path.join(project_dir, as_path)):
-            for file in os.listdir(os.path.join(project_dir, as_path)):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-        elif as_path in lake_packages.keys():
-            for file in os.listdir(lake_packages[as_path]):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-
-    paths = list(set(out))
-    return paths
 
 def load_plain_theorems(modules, project_dir=Path.cwd()):
     """
@@ -192,6 +158,103 @@ def load_annotated_goal_state_theorems_(modules, project_dir=Path.cwd()):
         if is_theorem(statement["decl"]):
             yield statement
 
-# if __name__ == "__main__":
-#     for decl in load_annotated_goal_state_theorems(["Mathlib.Algebra.Group"], project_dir="../../test_project/"):
-#         print(decl)
+
+
+def get_all_modules(modules, project_dir=Path.cwd()):
+    """
+    Get all modules (actual lean files) from a list of module paths that are possibly modules, possibly directories
+    """
+    out = []
+    cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
+    project_dir = Path(project_dir).resolve()
+    lake_packages = subprocess.run(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=project_dir
+    ).stdout.split("\n")
+
+    lake_packages = {
+        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(project_dir, p) for p in lake_packages
+    }
+
+    while modules:
+        m = modules.pop(0)
+        as_path = m.replace(".", "/")
+        if os.path.exists(os.path.join(project_dir, as_path + ".lean")):
+            out.append(m)
+        elif as_path + ".lean" in lake_packages.keys():
+            out.append(m)
+
+        # Handle directories
+        if os.path.exists(os.path.join(project_dir, as_path)):
+            for file in os.listdir(os.path.join(project_dir, as_path)):
+                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+        elif as_path in lake_packages.keys():
+            for file in os.listdir(lake_packages[as_path]):
+                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+
+    out = list(set(out))
+    return out
+
+
+def paths_to_modules(paths, project_dir=Path.cwd()):
+    """
+    Convert a list of file paths to Lean module names
+    """
+    out = []
+    project_dir = Path(project_dir).resolve()
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        path = Path(path).resolve()
+        if path.suffix != ".lean":
+            continue
+        p = str(path.relative_to(project_dir))
+        try:
+            if p.startswith(".lake/packages/") and p.endswith(".lean"):
+                p = ".".join(p.replace(".lake/packages/", "").split("/")[1:]).replace(".lean", "")
+                out.append(p)
+            elif p.endswith(".lean"):
+                p = p.replace("/", ".").replace(".lean", "")
+                out.append(p)
+        except:
+            continue
+    return out
+
+def modules_to_paths(modules, project_dir=Path.cwd()):
+    """
+    Convert a list of Lean module names to file paths
+    """
+    out = []
+    cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
+    project_dir = Path(project_dir).resolve()
+    lake_packages = subprocess.run(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=project_dir
+    ).stdout.split("\n")
+
+    lake_packages = {
+        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(project_dir, p) for p in lake_packages
+    }
+
+    while modules:
+        m = modules.pop(0)
+        as_path = m.replace(".", "/")
+        if os.path.exists(os.path.join(project_dir, as_path + ".lean")):
+            out.append(os.path.join(project_dir, as_path + ".lean"))
+        elif as_path + ".lean" in lake_packages.keys():
+            out.append(lake_packages[as_path + ".lean"])
+
+        # Handle directories
+        if os.path.exists(os.path.join(project_dir, as_path)):
+            for file in os.listdir(os.path.join(project_dir, as_path)):
+                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+        elif as_path in lake_packages.keys():
+            for file in os.listdir(lake_packages[as_path]):
+                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+
+    out = list(set(out))
+    return out
+
+if __name__ == "__main__":
+    # for decl in load_annotated_goal_state_theorems(["Mathlib.Algebra.Group"], project_dir="../../test_project/"):
+    #     print(decl)
+    # print(paths_to_modules(["../../../test_project/.lake/packages/mathlib/Mathlib/Algebra/Group/Basic.lean", "../../../test_project/TestProject.lean"], project_dir="../../../test_project/"))
+    pass
