@@ -2,9 +2,9 @@ import os, json, subprocess, re
 import time
 
 from .LeanIO import check_leanRAG_installation
-# from langchain_chroma import Chroma
-# from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-# from langchain_core.documents import Document
+from langchain_chroma import Chroma
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
+from langchain_core.documents import Document
 
 from .utils import load_annotated_goal_state_theorems, load_plain_theorems
 from .annotate import get_goal_annotations
@@ -19,16 +19,19 @@ __version__ = __version__("0.1.0")
 
 
 class Retriever:
-    def __init__(self, modules=(), database_path=None, model=None, preprocess=load_plain_theorems(["Mathlib"])):
+    def __init__(self, database_path=None, model=None, preprocess=load_plain_theorems(["Mathlib"])):
 
-        if not database_path:
+        if not database_path or not os.path.exists(database_path):
             if not model or not preprocess:
                 raise ValueError("Must specify a retrieval model and a preprocessor to create a new vectorstore")
 
-            self.database_path = os.path.join(
-                ".db",
-                f"{time.time()}_{model.lower()}"
-            )
+            if not database_path:
+                self.database_path = os.path.join(
+                    ".db",
+                    f"{time.time()}_{model.lower()}"
+                )
+            else:
+                self.database_path = database_path
             os.makedirs(self.database_path, exist_ok=True)
 
             self.model = model
@@ -37,8 +40,6 @@ class Retriever:
             self._set_config()
 
         else:
-            if not os.path.exists(database_path):
-                raise ValueError(f"No database found at {database_path}")
             self.database_path = database_path
             if any([file.endswith(".sqlite3") for file in os.listdir(self.database_path)]):
                 self.created = True
@@ -52,7 +53,6 @@ class Retriever:
 
             self.preprocess = preprocess
 
-        self.modules = modules
         self.vectorstore = None
 
     def _get_config(self):
@@ -84,7 +84,7 @@ class Retriever:
         )
 
         docs_queue = []
-        for declaration in self.preprocess(self.modules):
+        for declaration in self.preprocess():
             if type(declaration) is str:
                 docs_queue.append(
                     Document(
