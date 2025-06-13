@@ -1,5 +1,9 @@
-import os, json, subprocess, re
+import json
+import os
+import re
+import subprocess
 import time
+from pathlib import Path
 
 from .LeanIO import check_leanRAG_installation
 from langchain_chroma import Chroma
@@ -19,20 +23,32 @@ __version__ = __version__("0.1.0")
 
 
 class Retriever:
-    def __init__(self, database_path=None, model=None, preprocess=load_plain_theorems(["Mathlib"])):
+    """Simple wrapper around a Chroma vector store."""
 
-        if not database_path or not os.path.exists(database_path):
+    def __init__(self, database_path: str | Path | None = None, model=None, preprocess=load_plain_theorems(["Mathlib"])):
+        """Initialize a new :class:`Retriever`.
+
+        Parameters
+        ----------
+        database_path : str | Path | None, optional
+            Directory where the vector store should be stored.  If ``None`` a
+            new directory is created.
+        model : str | None
+            Name of the embedding model used by the vector store.
+        preprocess : Callable
+            Callable returning an iterable of documents to index when creating
+            a new store.
+        """
+
+        if not database_path or not Path(database_path).exists():
             if not model or not preprocess:
                 raise ValueError("Must specify a retrieval model and a preprocessor to create a new vectorstore")
 
             if not database_path:
-                self.database_path = os.path.join(
-                    ".db",
-                    f"{time.time()}_{model.lower().replace('/', '_')}"
-                )
+                self.database_path = Path(".db") / f"{time.time()}_{model.lower().replace('/', '_')}"
             else:
-                self.database_path = database_path
-            os.makedirs(self.database_path, exist_ok=True)
+                self.database_path = Path(database_path)
+            self.database_path.mkdir(parents=True, exist_ok=True)
 
             self.model = model
             self.preprocess = preprocess
@@ -40,8 +56,8 @@ class Retriever:
             self._set_config()
 
         else:
-            self.database_path = database_path
-            if any([file.endswith(".sqlite3") for file in os.listdir(self.database_path)]):
+            self.database_path = Path(database_path)
+            if any(p.suffix == ".sqlite3" for p in self.database_path.iterdir()):
                 self.created = True
             else:
                 self.created = False
@@ -57,30 +73,34 @@ class Retriever:
         self.vectorstore = None
 
     def _get_config(self):
-        if not os.path.exists(os.path.join(self.database_path, "config.json")):
+        """Return the configuration stored alongside the vector store."""
+        config_file = self.database_path / "config.json"
+        if not config_file.exists():
             raise ValueError("No config.json file found in the database directory. Specify a model and a preprocessor to create or convert a vectorstore.")
 
-        with open(os.path.join(self.database_path, "config.json"), "r") as f:
+        with config_file.open("r") as f:
             config = json.load(f)
 
         return config
 
     def _set_config(self):
+        """Persist configuration information for the vector store."""
         config = {
             "model": self.model,
             "preprocess": self.preprocess.__name__
         }
-        with open(os.path.join(self.database_path, "config.json"), "w") as f:
+        with (self.database_path / "config.json").open("w") as f:
             json.dump(config, f, indent=4)
 
     def create_vectorstore(self):
+        """Create a new Chroma vector store and ingest documents."""
 
         embeddings = HuggingFaceEmbeddings(
             model_name=self.model
         )
         vectorstore = Chroma(
             collection_name=self.model.lower().replace("/", "_") + "_db",
-            persist_directory=self.database_path,
+            persist_directory=str(self.database_path),
             embedding_function=embeddings,
         )
 
@@ -111,6 +131,7 @@ class Retriever:
         self.vectorstore = vectorstore
 
     def load_vectorstore(self):
+        """Load an existing Chroma vector store from disk."""
         if not self.created:
             raise ValueError("Vectorstore not created. Call create_vectorstore() first.")
 
@@ -119,11 +140,12 @@ class Retriever:
         )
         self.vectorstore = Chroma(
             collection_name=self.model.lower().replace("/", "_") + "_db",
-            persist_directory=self.database_path,
+            persist_directory=str(self.database_path),
             embedding_function=embeddings,
         )
 
     def retrieve(self, query, k=1, search_type="mmr"):
+        """Retrieve documents relevant to *query* from the vector store."""
         if not self.vectorstore:
             if not self.created:
                 print("Vectorstore not created. Creating a new vectorstore...")
