@@ -17,5 +17,6 @@ dependencies = [
     "langchain-core>=0.3.64",
     "langchain-huggingface>=0.2.0",
     "langchain-text-splitters>=0.3.8",
-    "requests>=2.32.3"
+    "requests>=2.32.3",
+    "sentence-transformers>=4.1.0"
 ]

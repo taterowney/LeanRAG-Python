@@ -3,6 +3,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .annotate import get_goal_annotations
+from .LeanIO import check_leanRAG_installation
 
 
 def get_decls_from_plaintext(text):
@@ -140,7 +141,7 @@ def load_annotated_goal_statements(modules, project_dir=Path.cwd()):
     """
     Load theorems from annotated goal state files. Delays evaluation.
     """
-
+    check_leanRAG_installation(project_dir=project_dir)
     return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
 
 def load_annotated_goal_statements_(modules, project_dir=Path.cwd()):
@@ -183,7 +184,7 @@ def load_annotated_goal_state_theorems(modules, project_dir=Path.cwd()):
     """
     Load theorems from annotated goal state files. Delays evaluation.
     """
-
+    check_leanRAG_installation(project_dir=project_dir)
     return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
 
 def load_annotated_goal_state_theorems_(modules, project_dir=Path.cwd()):

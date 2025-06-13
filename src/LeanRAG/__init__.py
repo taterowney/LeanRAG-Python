@@ -28,7 +28,7 @@ class Retriever:
             if not database_path:
                 self.database_path = os.path.join(
                     ".db",
-                    f"{time.time()}_{model.lower()}"
+                    f"{time.time()}_{model.lower().replace('/', '_')}"
                 )
             else:
                 self.database_path = database_path
@@ -46,12 +46,13 @@ class Retriever:
             else:
                 self.created = False
 
+            self.preprocess = preprocess
             if model:
+                self.model = model
                 self._set_config()
             else:
                 self.model = self._get_config()["model"]
 
-            self.preprocess = preprocess
 
         self.vectorstore = None
 
@@ -78,7 +79,7 @@ class Retriever:
             model_name=self.model
         )
         vectorstore = Chroma(
-            collection_name=self.model.lower() + "_db",
+            collection_name=self.model.lower().replace("/", "_") + "_db",
             persist_directory=self.database_path,
             embedding_function=embeddings,
         )
@@ -117,7 +118,7 @@ class Retriever:
             model_name=self.model
         )
         self.vectorstore = Chroma(
-            collection_name=self.model.lower() + "_db",
+            collection_name=self.model.lower().replace("/", "_") + "_db",
             persist_directory=self.database_path,
             embedding_function=embeddings,
         )
@@ -138,7 +139,3 @@ class Retriever:
 
         results = retriever.invoke(query)
         return results
-
-# if __name__ == "__main__":
-#     check_leanRAG_installation(project_dir="../../test_project")
-#     print(get_goal_annotations("Mathlib.Algebra.AddConstMap.Basic", project_dir="../../test_project"))
