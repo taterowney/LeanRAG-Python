@@ -1,4 +1,9 @@
-import os, re, subprocess, asyncio, multiprocessing, json
+import os
+import re
+import subprocess
+import asyncio
+import multiprocessing
+import json
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -68,38 +73,45 @@ def load_plain_theorems(modules, project_dir=Path.cwd()):
 
     return lambda: load_plain_theorems_(modules, project_dir=project_dir)
 
-def load_plain_theorems_(modules, project_dir=Path.cwd()):
-    paths = []
-    cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
+def load_plain_theorems_(modules, project_dir: str | Path = Path.cwd()):
+    project_dir = Path(project_dir).resolve()
+    paths: list[Path] = []
+    cmd = "find .lake/packages/ \( -type f -name '*.lean' -o -type d \)"
     lake_packages = subprocess.run(
-        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd=Path(project_dir).resolve()
+        cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        cwd=project_dir,
     ).stdout.split("\n")
 
     lake_packages = {
-        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(os.getcwd(), p) for p in lake_packages
+        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): project_dir / p for p in lake_packages
     }
     while modules:
         m = modules.pop(0)
         as_path = m.replace(".", "/")
-        if os.path.exists(os.path.join(os.getcwd(), as_path + ".lean")):
-            paths.append(os.path.join(os.getcwd(), as_path + ".lean"))
-        # elif "./lake/packages/" + as_path + ".lean" in lake_packages.keys():
-        elif as_path + ".lean" in lake_packages.keys():
+        candidate = project_dir / f"{as_path}.lean"
+        if candidate.exists():
+            paths.append(candidate)
+        elif as_path + ".lean" in lake_packages:
             paths.append(lake_packages[as_path + ".lean"])
 
         # Handle directories
-        if os.path.exists(os.path.join(os.getcwd(), as_path)):
-            for file in os.listdir(os.path.join(os.getcwd(), as_path)):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-        elif as_path in lake_packages.keys():
-            for file in os.listdir(lake_packages[as_path]):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+        directory = project_dir / as_path
+        if directory.exists():
+            for file in directory.iterdir():
+                modules.append(m + "." + file.name.replace(".lean", "").replace("/", "."))
+        elif as_path in lake_packages:
+            for file in Path(lake_packages[as_path]).iterdir():
+                modules.append(m + "." + file.name.replace(".lean", "").replace("/", "."))
 
     paths = list(set(paths))
 
     for path in paths:
-        assert os.path.exists(path), f"File {path} does not exist. Tate made an oopsie"
-        with open(path, "r") as f:
+        assert Path(path).exists(), f"File {path} does not exist. Tate made an oopsie"
+        with Path(path).open("r") as f:
             for decl in get_decls_from_plaintext(f.read()):
                 yield decl
 
@@ -141,7 +153,9 @@ def load_annotated_goal_statements_(modules, project_dir=Path.cwd()):
             except Exception as e:
                 print(f"Error processing module: {e}")
 
-def is_theorem(statement):
+def is_theorem(statement: str) -> bool:
+    """Return ``True`` if *statement* starts with a Lean declaration."""
+
     decl_re = re.compile(r'^\s*(?:@\[[^\]]*\]\s*)*(theorem|lemma|example|problem|def)\b')
     if decl_re.match(statement):
         return True
@@ -153,14 +167,16 @@ def load_annotated_goal_state_theorems(modules, project_dir=Path.cwd()):
     check_leanRAG_installation(project_dir=project_dir)
     return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
 
-def load_annotated_goal_state_theorems_(modules, project_dir=Path.cwd()):
+def load_annotated_goal_state_theorems_(modules, project_dir: str | Path = Path.cwd()):
+    """Yield only theorem declarations from goal state annotations."""
+
     for statement in load_annotated_goal_statements_(modules, project_dir=project_dir):
         if is_theorem(statement["decl"]):
             yield statement
 
 
 
-def get_all_modules(modules, project_dir=Path.cwd()):
+def get_all_modules(modules, project_dir: str | Path = Path.cwd()):
     """
     Get all modules (actual lean files) from a list of module paths that are possibly modules, possibly directories
     """
@@ -172,39 +188,39 @@ def get_all_modules(modules, project_dir=Path.cwd()):
     ).stdout.split("\n")
 
     lake_packages = {
-        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(project_dir, p) for p in lake_packages
+        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): project_dir / p for p in lake_packages
     }
 
     while modules:
         m = modules.pop(0)
         as_path = m.replace(".", "/")
-        if os.path.exists(os.path.join(project_dir, as_path + ".lean")):
-            out.append(m)
-        elif as_path + ".lean" in lake_packages.keys():
+        if (project_dir / f"{as_path}.lean").exists() or as_path + ".lean" in lake_packages:
             out.append(m)
 
         # Handle directories
-        if os.path.exists(os.path.join(project_dir, as_path)):
-            for file in os.listdir(os.path.join(project_dir, as_path)):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-        elif as_path in lake_packages.keys():
-            for file in os.listdir(lake_packages[as_path]):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+        directory = project_dir / as_path
+        if directory.exists():
+            for file in directory.iterdir():
+                modules.append(m + "." + file.name.replace(".lean", "").replace("/", "."))
+        elif as_path in lake_packages:
+            for file in Path(lake_packages[as_path]).iterdir():
+                modules.append(m + "." + file.name.replace(".lean", "").replace("/", "."))
 
     out = list(set(out))
     return out
 
 
-def paths_to_modules(paths, project_dir=Path.cwd()):
+def paths_to_modules(paths, project_dir: str | Path = Path.cwd()):
     """
     Convert a list of file paths to Lean module names
     """
     out = []
     project_dir = Path(project_dir).resolve()
     for path in paths:
-        if not os.path.exists(path):
+        path = Path(path)
+        if not path.exists():
             continue
-        path = Path(path).resolve()
+        path = path.resolve()
         if path.suffix != ".lean":
             continue
         p = str(path.relative_to(project_dir))
@@ -219,7 +235,7 @@ def paths_to_modules(paths, project_dir=Path.cwd()):
             continue
     return out
 
-def modules_to_paths(modules, project_dir=Path.cwd()):
+def modules_to_paths(modules, project_dir: str | Path = Path.cwd()):
     """
     Convert a list of Lean module names to file paths
     """
@@ -231,24 +247,26 @@ def modules_to_paths(modules, project_dir=Path.cwd()):
     ).stdout.split("\n")
 
     lake_packages = {
-        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): os.path.join(project_dir, p) for p in lake_packages
+        "/".join(p.replace(".lake/packages/", "").split("/")[1:]): project_dir / p for p in lake_packages
     }
 
     while modules:
         m = modules.pop(0)
         as_path = m.replace(".", "/")
-        if os.path.exists(os.path.join(project_dir, as_path + ".lean")):
-            out.append(os.path.join(project_dir, as_path + ".lean"))
-        elif as_path + ".lean" in lake_packages.keys():
+        candidate = project_dir / f"{as_path}.lean"
+        if candidate.exists():
+            out.append(candidate)
+        elif as_path + ".lean" in lake_packages:
             out.append(lake_packages[as_path + ".lean"])
 
         # Handle directories
-        if os.path.exists(os.path.join(project_dir, as_path)):
-            for file in os.listdir(os.path.join(project_dir, as_path)):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
-        elif as_path in lake_packages.keys():
-            for file in os.listdir(lake_packages[as_path]):
-                modules.append(m + "." + file.replace(".lean", "").replace("/", "."))
+        directory = project_dir / as_path
+        if directory.exists():
+            for file in directory.iterdir():
+                modules.append(m + "." + file.name.replace(".lean", "").replace("/", "."))
+        elif as_path in lake_packages:
+            for file in Path(lake_packages[as_path]).iterdir():
+                modules.append(m + "." + file.name.replace(".lean", "").replace("/", "."))
 
     out = list(set(out))
     return out

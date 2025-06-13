@@ -1,11 +1,16 @@
-import subprocess, asyncio, os, json, shutil, requests
+import asyncio
+import json
+import os
+import shutil
+import subprocess
+import requests
 from pathlib import Path
 from typing import Tuple, Optional
 from urllib.parse import quote
 
 
 
-async def run_lean_command(command, project_dir=os.getcwd()):
+async def run_lean_command(command, project_dir: str | Path = Path.cwd()):
     """
     Run a Lean command asynchronously and return the output.
     """
@@ -14,7 +19,7 @@ async def run_lean_command(command, project_dir=os.getcwd()):
         *command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd=project_dir
+        cwd=str(Path(project_dir)),
     )
 
     stdout, stderr = await process.communicate()
