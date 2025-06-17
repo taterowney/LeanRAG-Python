@@ -94,7 +94,7 @@ class Retriever:
         self.database_path = None
         for dir, cfg in _list_configs(db_dir).items():
             if cfg["model"] == model and cfg["modules"] == list(modules):
-                self.database_path = dir
+                self.database_path = Path(dir).resolve()
                 self.created = cfg["created"]
                 self.project_dir = Path(cfg["project_dir"]).resolve()
                 break
