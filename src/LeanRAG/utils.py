@@ -76,7 +76,7 @@ def load_plain_theorems(modules, project_dir=Path.cwd()):
 def load_plain_theorems_(modules, project_dir: str | Path = Path.cwd()):
     project_dir = Path(project_dir).resolve()
     paths: list[Path] = []
-    cmd = "find .lake/packages/ \( -type f -name '*.lean' -o -type d \)"
+    cmd = r"find .lake/packages/ \( -type f -name '*.lean' -o -type d \)"
     lake_packages = subprocess.run(
         cmd,
         shell=True,

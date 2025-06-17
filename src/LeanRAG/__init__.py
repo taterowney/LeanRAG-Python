@@ -12,6 +12,7 @@ from langchain_core.documents import Document
 
 from .utils import load_annotated_goal_state_theorems, load_plain_theorems
 from .annotate import get_goal_annotations
+from typing import Tuple
 
 class __version__:
     def __init__(self, version):
@@ -21,56 +22,100 @@ class __version__:
         return self.version
 __version__ = __version__("0.1.0")
 
+def _list_configs(database_path: str | Path = Path(".db")):
+    """List all vector store configurations in the given directory."""
+    database_path = Path(database_path)
+    if not database_path.exists():
+        return []
+
+    configs = {}
+    for p in database_path.iterdir():
+        if (p / "config.json").exists():
+            with (p / "config.json").open("r") as f:
+                try:
+                    config = json.load(f)
+                    configs[str(p)] = config
+                except json.JSONDecodeError:
+                    pass
+    return configs
+
+def load_from_path(database):
+    """Load a vector store from a given path."""
+    if type(database) is str:
+        database = Path(database)
+    if not database.exists():
+        raise ValueError(f"Database path {database} does not exist.")
+
+    if not (database / "config.json").exists():
+        raise ValueError(f"No config.json found in {database}. Make sure this is a valid vector store directory.")
+
+    with open(database / "config.json", "r") as f:
+        config = json.load(f)
+
+    return Retriever(
+        modules=tuple(config["modules"]),
+        model=config["model"],
+        db_dir=database,
+        preprocess=load_plain_theorems
+    )
 
 class Retriever:
-    """Simple wrapper around a Chroma vector store."""
+    """Wrapper around a Chroma vector store."""
 
-    def __init__(self, database_path: str | Path | None = None, model=None, preprocess=load_plain_theorems(["Mathlib"])):
+    def __init__(self, modules : Tuple[str], model : str, db_dir: str | Path = Path(".db"), preprocess=load_plain_theorems, project_dir: str | Path = Path.cwd()):
         """Initialize a new :class:`Retriever`.
 
         Parameters
         ----------
-        database_path : str | Path | None, optional
-            Directory where the vector store should be stored.  If ``None`` a
-            new directory is created.
-        model : str | None
+        modules : Tuple[str]
+            List of Lean modules to index. Cannot be empty.
+        model : str
             Name of the embedding model used by the vector store.
         preprocess : Callable
             Callable returning an iterable of documents to index when creating
             a new store.
+        db_path : str | Path | None, optional
+            Directory where the vector store should be stored.  If ``None`` a
+            new directory is created.
         """
 
-        if not database_path or not Path(database_path).exists():
-            if not model or not preprocess:
-                raise ValueError("Must specify a retrieval model and a preprocessor to create a new vectorstore")
+        if type(db_dir) is str:
+            db_dir = Path(db_dir)
+        db_dir = db_dir.resolve()
+        if not db_dir.exists():
+            db_dir.mkdir(parents=True, exist_ok=True)
 
-            if not database_path:
-                self.database_path = Path(".db") / f"{time.time()}_{model.lower().replace('/', '_')}"
-            else:
-                self.database_path = Path(database_path)
+        if type(project_dir) is str:
+            project_dir = Path(project_dir)
+        project_dir = project_dir.resolve()
+        if not project_dir.exists() or not (project_dir / "lean-toolchain").exists():
+            raise ValueError(f"{project_dir} is not a Lean project. Specify a valid Lean project directory using the `project_dir` parameter.")
+
+        self.database_path = None
+        for dir, cfg in _list_configs(db_dir).items():
+            if cfg["model"] == model and cfg["modules"] == list(modules):
+                self.database_path = dir
+                self.created = cfg["created"]
+                self.project_dir = Path(cfg["project_dir"]).resolve()
+                break
+        if not self.database_path:
+            self.database_path = db_dir / f"{time.time()}_{model.lower().replace('/', '_')}"
             self.database_path.mkdir(parents=True, exist_ok=True)
-
-            self.model = model
-            self.preprocess = preprocess
             self.created = False
-            self._set_config()
+            self.project_dir = project_dir.resolve()
 
-        else:
-            self.database_path = Path(database_path)
-            if any(p.suffix == ".sqlite3" for p in self.database_path.iterdir()):
-                self.created = True
-            else:
-                self.created = False
-
-            self.preprocess = preprocess
-            if model:
-                self.model = model
-                self._set_config()
-            else:
-                self.model = self._get_config()["model"]
-
+        self.modules = modules
+        self.model = model
+        self.preprocess = preprocess
+        self._set_config()
 
         self.vectorstore = None
+
+        if not self.created:
+            self.create_vectorstore()
+            self.created = True
+            self._set_config()
+
 
     def _get_config(self):
         """Return the configuration stored alongside the vector store."""
@@ -87,7 +132,9 @@ class Retriever:
         """Persist configuration information for the vector store."""
         config = {
             "model": self.model,
-            "preprocess": self.preprocess.__name__
+            "modules": list(self.modules),
+            "created": self.created,
+            "project_dir": str(self.project_dir),
         }
         with (self.database_path / "config.json").open("w") as f:
             json.dump(config, f, indent=4)
@@ -161,3 +208,9 @@ class Retriever:
 
         results = retriever.invoke(query)
         return results
+
+if __name__ == "__main__":
+    retriever = Retriever(
+        modules=("Mathlib.Algebra.Group",),
+        model="hanwenzhu/all-distilroberta-v1-lr2e-4-bs256-nneg3-ml-mar13",
+    )
