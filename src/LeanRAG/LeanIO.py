@@ -25,7 +25,7 @@ async def run_lean_command(command, project_dir: str | Path = Path.cwd()):
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
-        raise RuntimeError(f"Lean command failed: {stderr.decode().strip()}")
+        print(f"Lean warning/error: {stderr.decode().strip()}")
 
     return stdout.decode().strip()
 
@@ -94,8 +94,9 @@ def check_leanRAG_installation(
             f"Detected Lean version {lean_version} is not currently supported by LeanRAG. "
         )
 
-    if not input("It looks like LeanRAG is not installed and/or built in your Lean project. Would you like to add it? (y/N) ").strip().lower().startswith("y"):
-        return
+    # if not input("It looks like LeanRAG is not installed and/or built in your Lean project. Would you like to add it? (y/N) ").strip().lower().startswith("y"):
+    #     return
+    print("LeanRAG not found in the project. Adding it and rebuilding...")
 
     if toml_file.exists():
         text = toml_file.read_text(encoding="utf-8")

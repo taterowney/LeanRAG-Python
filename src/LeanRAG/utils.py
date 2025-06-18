@@ -66,14 +66,7 @@ def get_decls_from_plaintext(text):
     return blocks
 
 
-def load_plain_theorems(modules, project_dir=Path.cwd()):
-    """
-    Load theorems from plain text Lean files. Delays evaluation.
-    """
-
-    return lambda: load_plain_theorems_(modules, project_dir=project_dir)
-
-def load_plain_theorems_(modules, project_dir: str | Path = Path.cwd()):
+def load_plain_theorems(modules, project_dir: str | Path = Path.cwd()):
     project_dir = Path(project_dir).resolve()
     paths: list[Path] = []
     cmd = r"find .lake/packages/ \( -type f -name '*.lean' -o -type d \)"
@@ -115,20 +108,13 @@ def load_plain_theorems_(modules, project_dir: str | Path = Path.cwd()):
             for decl in get_decls_from_plaintext(f.read()):
                 yield decl
 
-def load_annotated_goal_statements(modules, project_dir=Path.cwd()):
-    """
-    Load theorems from annotated goal state files. Delays evaluation.
-    """
-    check_leanRAG_installation(project_dir=project_dir)
-    return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
 
-def load_annotated_goal_statements_(modules, project_dir=Path.cwd()):
+def load_annotated_goal_statements(modules, project_dir=Path.cwd()):
     """
     Load theorems from annotated goal state files.
     """
 
     # semaphore = asyncio.Semaphore(multiprocessing.cpu_count())
-
     # Doing this without full async for now, I'm lazy
     with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
         futures = []
@@ -159,18 +145,20 @@ def is_theorem(statement: str) -> bool:
     decl_re = re.compile(r'^\s*(?:@\[[^\]]*\]\s*)*(theorem|lemma|example|problem|def)\b')
     if decl_re.match(statement):
         return True
+    return False
 
-def load_annotated_goal_state_theorems(modules, project_dir=Path.cwd()):
-    """
-    Load theorems from annotated goal state files. Delays evaluation.
-    """
-    check_leanRAG_installation(project_dir=project_dir)
-    return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
+# def load_annotated_goal_state_theorems(modules, project_dir=Path.cwd()):
+#     """
+#     Load theorems from annotated goal state files. Delays evaluation.
+#     """
+#     check_leanRAG_installation(project_dir=project_dir)
+#     return lambda: load_annotated_goal_state_theorems_(modules, project_dir=project_dir)
 
-def load_annotated_goal_state_theorems_(modules, project_dir: str | Path = Path.cwd()):
+def load_annotated_goal_state_theorems(modules, project_dir: str | Path = Path.cwd()):
     """Yield only theorem declarations from goal state annotations."""
+    check_leanRAG_installation(project_dir=project_dir)
 
-    for statement in load_annotated_goal_statements_(modules, project_dir=project_dir):
+    for statement in load_annotated_goal_statements(modules, project_dir=project_dir):
         if is_theorem(statement["decl"]):
             yield statement
 

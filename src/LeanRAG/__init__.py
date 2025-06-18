@@ -10,7 +10,7 @@ from langchain_chroma import Chroma
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-from .utils import load_annotated_goal_state_theorems, load_plain_theorems
+from .utils import load_annotated_goal_state_theorems, load_plain_theorems, get_all_modules
 from .annotate import get_goal_annotations
 from typing import Tuple
 
@@ -24,7 +24,7 @@ __version__ = __version__("0.1.0")
 
 def _list_configs(database_path: str | Path = Path(".db")):
     """List all vector store configurations in the given directory."""
-    database_path = Path(database_path)
+    database_path = Path(database_path).resolve()
     if not database_path.exists():
         return []
 
@@ -87,16 +87,17 @@ class Retriever:
 
         if type(project_dir) is str:
             project_dir = Path(project_dir)
-        project_dir = project_dir.resolve()
-        if not project_dir.exists() or not (project_dir / "lean-toolchain").exists():
-            raise ValueError(f"{project_dir} is not a Lean project. Specify a valid Lean project directory using the `project_dir` parameter.")
+        self.project_dir = project_dir.resolve()
+        if not self.project_dir.exists() or not (self.project_dir / "lean-toolchain").exists():
+            raise ValueError(f"{self.project_dir} is not a Lean project. Specify a valid Lean project directory using the `project_dir` parameter.")
+
+        modules = tuple(get_all_modules(list(modules), project_dir=self.project_dir))
 
         self.database_path = None
         for dir, cfg in _list_configs(db_dir).items():
-            if cfg["model"] == model and cfg["modules"] == list(modules):
+            if cfg["model"] == model and cfg["modules"].sort() == list(modules).sort() and cfg["project_dir"] == self.project_dir.as_posix():
                 self.database_path = Path(dir).resolve()
                 self.created = cfg["created"]
-                self.project_dir = Path(cfg["project_dir"]).resolve()
                 break
         if not self.database_path:
             self.database_path = db_dir / f"{time.time()}_{model.lower().replace('/', '_')}"
@@ -134,13 +135,19 @@ class Retriever:
             "model": self.model,
             "modules": list(self.modules),
             "created": self.created,
-            "project_dir": str(self.project_dir),
+            "project_dir": str(self.project_dir.as_posix()),
         }
         with (self.database_path / "config.json").open("w") as f:
             json.dump(config, f, indent=4)
 
     def create_vectorstore(self):
         """Create a new Chroma vector store and ingest documents."""
+
+        # for declaration in self.preprocess(list(self.modules), project_dir=self.project_dir):
+        #     print("DECL : " + str(declaration))
+        #
+        # return
+
 
         embeddings = HuggingFaceEmbeddings(
             model_name=self.model
