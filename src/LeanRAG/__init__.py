@@ -159,7 +159,7 @@ class Retriever:
         )
 
         docs_queue = []
-        for declaration in self.preprocess(list(self.modules))():
+        for declaration in self.preprocess(list(self.modules), project_dir=self.project_dir):
             print(declaration)
             if type(declaration) is str:
                 docs_queue.append(
