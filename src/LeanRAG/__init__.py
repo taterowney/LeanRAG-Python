@@ -148,7 +148,7 @@ class Retriever:
         #
         # return
 
-
+        print("Building vectorstore!")
         embeddings = HuggingFaceEmbeddings(
             model_name=self.model
         )
@@ -160,6 +160,7 @@ class Retriever:
 
         docs_queue = []
         for declaration in self.preprocess(list(self.modules))():
+            print(declaration)
             if type(declaration) is str:
                 docs_queue.append(
                     Document(
