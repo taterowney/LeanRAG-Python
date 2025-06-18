@@ -114,7 +114,7 @@ def check_leanRAG_installation(
         text = lean_file.read_text(encoding="utf-8")
         if "require" not in text or "LeanRAG" not in text:
             snippet = (
-                f'\nrequire "{git_url}" / "LeanRAG" @ git "{rev}"\n'
+                f'\nrequire LeanRAG from git "{git_url}" @ "{rev}"\n'
             )
             # Insert after the last existing `require` (or at EOF).
             insert_at = text.rfind("require")
