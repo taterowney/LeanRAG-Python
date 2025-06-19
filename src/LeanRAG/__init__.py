@@ -62,7 +62,7 @@ def load_from_path(database):
 class Retriever:
     """Wrapper around a Chroma vector store."""
 
-    def __init__(self, modules : Tuple[str], model : str, db_dir: str | Path = Path(".db"), preprocess=load_plain_theorems, project_dir: str | Path = Path.cwd()):
+    def __init__(self, modules : Tuple[str], model : str, db_dir: str | Path = Path(".db"), preprocess=load_plain_theorems, project_dir: str | Path = Path.cwd(), retrieval_preprocess=lambda s: s):
         """Initialize a new :class:`Retriever`.
 
         Parameters
@@ -108,6 +108,7 @@ class Retriever:
         self.modules = modules
         self.model = model
         self.preprocess = preprocess
+        self.retrieval_preprocess = retrieval_preprocess
         self._set_config()
 
         self.vectorstore = None
@@ -160,7 +161,7 @@ class Retriever:
 
         docs_queue = []
         for declaration in self.preprocess(list(self.modules), project_dir=self.project_dir):
-            print(declaration)
+            declaration = self.retrieval_preprocess(declaration)
             if type(declaration) is str:
                 docs_queue.append(
                     Document(

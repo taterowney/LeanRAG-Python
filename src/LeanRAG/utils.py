@@ -8,7 +8,8 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .annotate import get_goal_annotations
-from .LeanIO import check_leanRAG_installation
+from .LeanIO import check_leanRAG_installation, run_lean_command, run_lean_command_sync
+
 
 def get_decls_from_plaintext(text):
     """
@@ -258,6 +259,30 @@ def modules_to_paths(modules, project_dir: str | Path = Path.cwd()):
 
     out = list(set(out))
     return out
+
+
+def get_initial_goal_state(theorem_name: str, module: str, project_dir: str | Path = Path.cwd()) -> str:
+    """
+    Get the initial goal state for a theorem in a Lean module.
+
+    Parameters
+    ----------
+    theorem_name : str
+        The name of the theorem.
+    module : str
+        The Lean module where the theorem is defined.
+    project_dir : str | Path, default = current working directory
+        Path to the Lean workspace root.
+
+    Returns
+    -------
+    str
+        The initial goal state as a string.
+    """
+    # check_leanRAG_installation(project_dir=project_dir)
+    command = f"extract_initial_proofstate {module} {theorem_name}"
+
+    return run_lean_command_sync(command, project_dir=project_dir)
 
 if __name__ == "__main__":
     # for decl in load_annotated_goal_state_theorems(["Mathlib.Algebra.Group"], project_dir="../../test_project/"):

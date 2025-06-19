@@ -29,6 +29,11 @@ async def run_lean_command(command, project_dir: str | Path = Path.cwd()):
 
     return stdout.decode().strip()
 
+def run_lean_command_sync(command, project_dir: str | Path = Path.cwd()):
+    """
+    Run a Lean command synchronously and return the output.
+    """
+    return asyncio.run(run_lean_command(command, project_dir))
 
 # TODO: test
 def check_leanRAG_installation(
