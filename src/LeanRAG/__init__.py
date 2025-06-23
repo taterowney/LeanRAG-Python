@@ -172,8 +172,8 @@ class Retriever:
                 docs_queue.append(declaration)
             elif type(declaration) is dict:
                 declaration = declaration.copy()
-                content = declaration.pop("content", None)
-                assert content is not None, "Document must have a 'content' field."
+                content = declaration.pop("page_content", None)
+                assert content is not None, "Document must have a 'page_content' field."
                 docs_queue.append(
                     Document(
                         page_content=content,

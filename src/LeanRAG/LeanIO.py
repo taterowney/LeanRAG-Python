@@ -299,5 +299,5 @@ def get_leanrag_tag_commit(
 
     raise ValueError(f"No tag matching version '{version}' found in {repo!r}")
 
-if __name__ == "__main__":
-    print(get_leanrag_branch_commit("4.20.0"))
+# if __name__ == "__main__":
+#     print(get_leanrag_branch_commit("4.20.0"))
