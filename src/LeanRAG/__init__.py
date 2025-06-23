@@ -171,10 +171,13 @@ class Retriever:
             elif type(declaration) is Document:
                 docs_queue.append(declaration)
             elif type(declaration) is dict:
+                declaration = declaration.copy()
+                content = declaration.pop("content", None)
+                assert content is not None, "Document must have a 'content' field."
                 docs_queue.append(
                     Document(
-                        page_content=declaration["page_content"],
-                        metadata=declaration.get("metadata", {})
+                        page_content=content,
+                        metadata=declaration
                     )
                 )
 
