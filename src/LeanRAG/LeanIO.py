@@ -80,7 +80,6 @@ def check_leanRAG_installation(
     # ------------------------------------------------------------------
     toml_file = project_dir / "lakefile.toml"
     lean_file = project_dir / "lakefile.lean"
-    added_dep = False
 
     git_url = "https://github.com/taterowney/LeanRAG"
     if (project_dir / "lean-toolchain").exists():
@@ -133,24 +132,45 @@ def check_leanRAG_installation(
         raise FileNotFoundError(
             f"Neither lakefile.toml nor lakefile.lean found in {project_dir}"
         )
+    # ------------------------------------------------------------------
+    # 2.5 (I forgor).   Patch the lake-manifest file directly so we don't have to regenerate it to avoid problems with outdated repository versions.
+    # ------------------------------------------------------------------
+    if manifest.is_file():
+        with manifest.open(encoding="utf-8") as f:
+            data = json.load(f)
+        if "packages" not in data:
+            data["packages"] = []
+        if not any(pkg.get("name") == "LeanRAG" for pkg in data["packages"]):
+            data["packages"].append({"url": "https://github.com/taterowney/LeanRAG",
+               "type": "git",
+               "subDir": None,
+               "scope": "",
+               "rev": rev,
+               "name": "LeanRAG",
+               "manifestFile": "lake-manifest.json",
+               "inputRev": rev,
+               "inherited": False,
+               "configFile": "lakefile.toml"})
+        with manifest.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
     # ------------------------------------------------------------------
     # 3.  Use Lake to rebuild project dependencies.
     # ------------------------------------------------------------------
-    # if added_dep:
     if shutil.which("lake") is None:
         raise EnvironmentError(
             "The `lake` tool cannot be found on your PATH; "
-            "please install the Lean tool-chain first."
+            "please install the Lean toolchain first."
         )
 
     try:
-        subprocess.run(
-            ["lake", "update", "LeanRAG"],
-            cwd=project_dir,
-            check=True,
-            text=True,
-        )
+        # We shouldn't have to lake update since we add it manually to the lake-manifest
+        # subprocess.run(
+        #     ["lake", "update", "LeanRAG"],
+        #     cwd=project_dir,
+        #     check=True,
+        #     text=True,
+        # )
         subprocess.run(
             ["lake", "build", "LeanRAG"],
             cwd=project_dir,
