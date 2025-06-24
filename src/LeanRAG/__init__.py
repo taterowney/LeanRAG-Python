@@ -10,7 +10,7 @@ from langchain_chroma import Chroma
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-from .utils import load_annotated_goal_state_theorems, load_plain_theorems, get_all_modules, get_relevant_modules
+from .utils import load_annotated_goal_state_theorems, load_plain_theorems, get_all_modules, get_relevant_modules, get_initial_goal_state
 from .annotate import get_goal_annotations
 from typing import Tuple
 
