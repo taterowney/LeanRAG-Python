@@ -167,7 +167,7 @@ def load_annotated_goal_state_theorems(modules, project_dir: str | Path = Path.c
 
 def get_all_modules(modules, project_dir: str | Path = Path.cwd()):
     """
-    Get all modules (actual lean files) from a list of module paths that are possibly modules, possibly directories
+    Get all modules (ones that correspond to actual lean files) from a list of module that are possibly lean files or possibly directories
     """
     out = []
     cmd = "find .lake/packages/ \\( -type f -name '*.lean' -o -type d \\)"
@@ -283,6 +283,48 @@ def get_initial_goal_state(theorem_name: str, module: str, project_dir: str | Pa
     command = f"extract_initial_proofstate {module} {theorem_name}"
 
     return run_lean_command_sync(command, project_dir=project_dir)
+
+def get_relevant_modules(module, project_dir: str | Path = Path.cwd()) -> tuple[str]:
+    """
+    Get all modules that are relevant to a given module.
+    This includes all sub-modules and first-degree imports from other packages.
+
+    Parameters
+    ----------
+    module : str
+        The name of the Lean module.
+    project_dir : str | Path, default = current working directory
+        Path to the Lean workspace root.
+
+    Returns
+    -------
+    list[str]
+        A list of relevant module names.
+    """
+    ret = []
+    top_dir = Path(project_dir).resolve() / f"{module.replace(".", "/")}"
+    top_file = top_dir.with_suffix(".lean")
+    if top_dir.exists():
+        for file in top_dir.rglob("*.lean"):
+            with file.open("r") as f:
+                content = f.read()
+                for line in content.splitlines():
+                    if line.startswith("import "):
+                        imported_module = line.split("import ")[1].strip()
+                        if imported_module not in ret:
+                            ret.append(imported_module)
+    elif top_file.exists():
+        with top_file.open("r") as f:
+            content = f.read()
+            for line in content.splitlines():
+                if line.startswith("import "):
+                    imported_module = line.split("import ")[1].strip()
+                    if imported_module not in ret:
+                        ret.append(imported_module)
+    else:
+        raise ValueError(f"Module {module} not found in project directory {project_dir}.")
+    ret.extend(get_all_modules(ret, project_dir=project_dir))
+    return tuple(ret)
 
 if __name__ == "__main__":
     # for decl in load_annotated_goal_state_theorems(["Mathlib.Algebra.Group"], project_dir="../../test_project/"):
