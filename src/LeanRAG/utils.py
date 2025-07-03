@@ -280,7 +280,7 @@ def get_initial_goal_state(theorem_name: str, module: str, project_dir: str | Pa
         The initial goal state as a string.
     """
     # check_leanRAG_installation(project_dir=project_dir)
-    command = f"extract_initial_proofstate {module} {theorem_name}"
+    command = f"get_initial_proofstate {module} {theorem_name}"
 
     return run_lean_command_sync(command, project_dir=project_dir)
 

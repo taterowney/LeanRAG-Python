@@ -3,6 +3,8 @@ import json
 import os
 import shutil
 import subprocess
+from subprocess import SubprocessError
+
 import requests
 from pathlib import Path
 from typing import Tuple, Optional
@@ -25,7 +27,10 @@ async def run_lean_command(command, project_dir: str | Path = Path.cwd()):
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
-        print(f"Lean warning/error: {stderr.decode().strip()}")
+        err = stderr.decode().strip()
+        for line in err.split("\n"):
+            if line.startswith("error: "):
+                raise subprocess.CalledProcessError(process.returncode, cmd=" ".join(command), stderr=f"Error while running script {" ".join(command)}:\n{err}")
 
     return stdout.decode().strip()
 
@@ -35,7 +40,6 @@ def run_lean_command_sync(command, project_dir: str | Path = Path.cwd()):
     """
     return asyncio.run(run_lean_command(command, project_dir))
 
-# TODO: test
 def check_leanRAG_installation(
     project_dir: str | Path = Path.cwd(),
 ) -> None:
@@ -112,7 +116,6 @@ def check_leanRAG_installation(
                 f'rev  = "{rev}"\n'
             )
             toml_file.write_text(text + snippet, encoding="utf-8")
-            added_dep = True
 
     elif lean_file.exists():
         text = lean_file.read_text(encoding="utf-8")
@@ -121,7 +124,7 @@ def check_leanRAG_installation(
                 f'\nrequire LeanRAG from git "{git_url}" @ "{rev}"\n'
             )
             # Insert after the last existing `require` (or at EOF).
-            insert_at = text.rfind("require")
+            insert_at = text.rfind("require ") #TODO: make sure it's not in a comment
             if insert_at == -1:
                 lean_file.write_text(text + snippet, encoding="utf-8")
             else:
@@ -164,13 +167,6 @@ def check_leanRAG_installation(
         )
 
     try:
-        # We shouldn't have to lake update since we add it manually to the lake-manifest
-        # subprocess.run(
-        #     ["lake", "update", "LeanRAG"],
-        #     cwd=project_dir,
-        #     check=True,
-        #     text=True,
-        # )
         subprocess.run(
             ["lake", "build", "LeanRAG"],
             cwd=project_dir,
