@@ -88,7 +88,7 @@ class Client:
             if gpus == 0:
                 raise RuntimeError("No GPUs detected on CUDA. Make sure this task has access to properly configured GPUs.")
             os.environ["NCCL_P2P_DISABLE"] = "1"
-            ray.init(num_cpus=cpus, num_gpus=gpus, _temp_dir=(Path.home() / "ray_tmp").as_posix())
+            ray.init(num_cpus=cpus, num_gpus=gpus, _temp_dir=(Path.home() / "ray_tmp").as_posix(), log_to_driver=False)
             DataContext.get_current().wait_for_min_actors_s = 1800
             ctx = DataContext.get_current()
 
