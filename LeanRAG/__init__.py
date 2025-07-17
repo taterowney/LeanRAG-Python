@@ -1,7 +1,4 @@
 import json
-import os
-import re
-import subprocess
 import time
 from pathlib import Path
 
@@ -10,9 +7,10 @@ from langchain_chroma import Chroma
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 
-from .utils import load_annotated_goal_state_theorems, load_plain_theorems, get_all_modules, get_relevant_modules, get_initial_goal_state
-from .annotate import get_goal_annotations
-from typing import Tuple
+from .module import Module, Declaration, get_all_files
+from .dataset import Dataset, RestrictedModule, dataset_from_modules, dataset_from_json
+from .formal import load_annotated_goal_state_theorems, get_initial_goal_state
+
 
 class __version__:
     def __init__(self, version):
@@ -53,7 +51,7 @@ def load_from_path(database):
         config = json.load(f)
 
     return Retriever(
-        modules=tuple(config["modules"]),
+        modules=config["modules"],
         model=config["model"],
         db_dir=database,
         preprocess=load_plain_theorems
@@ -62,12 +60,12 @@ def load_from_path(database):
 class Retriever:
     """Wrapper around a Chroma vector store."""
 
-    def __init__(self, modules : Tuple[str], model : str, db_dir: str | Path = Path(".db"), preprocess=load_plain_theorems, project_dir: str | Path = Path.cwd(), retrieval_preprocess=lambda s: s):
+    def __init__(self, *modules : Module, model : str, db_dir: str | Path = Path(".db"), preprocess=lambda x: x, retrieval_preprocess=lambda s: s):
         """Initialize a new :class:`Retriever`.
 
         Parameters
         ----------
-        modules : Tuple[str]
+        modules : List[Module]
             List of Lean modules to index. Cannot be empty.
         model : str
             Name of the embedding model used by the vector store.
@@ -85,17 +83,19 @@ class Retriever:
         if not db_dir.exists():
             db_dir.mkdir(parents=True, exist_ok=True)
 
-        if type(project_dir) is str:
-            project_dir = Path(project_dir)
-        self.project_dir = project_dir.resolve()
+        if not hasattr(preprocess, "__name__") or not preprocess.__name__ == "RetrievalOperation":
+            preprocess = RetrievalOperation(preprocess)
+
+        self.project_dir = modules[0].lean_dir
         if not self.project_dir.exists() or not (self.project_dir / "lean-toolchain").exists():
             raise ValueError(f"{self.project_dir} is not a Lean project. Specify a valid Lean project directory using the `project_dir` parameter.")
 
-        modules = tuple(get_all_modules(list(modules), project_dir=self.project_dir))
+        modules = get_all_files(modules)
+        module_names = [m.name for m in modules]
 
         self.database_path = None
         for dir, cfg in _list_configs(db_dir).items():
-            if cfg["model"] == model and cfg["modules"].sort() == list(modules).sort() and cfg["project_dir"] == self.project_dir.as_posix():
+            if cfg["model"] == model and cfg["modules"].sort() == list(module_names).sort() and cfg["project_dir"] == self.project_dir.as_posix() and cfg["preprocess_name"] == preprocess.name:
                 self.database_path = Path(dir).resolve()
                 self.created = cfg["created"]
                 break
@@ -103,7 +103,7 @@ class Retriever:
             self.database_path = db_dir / f"{time.time()}_{model.lower().replace('/', '_')}"
             self.database_path.mkdir(parents=True, exist_ok=True)
             self.created = False
-            self.project_dir = project_dir.resolve()
+            self.project_dir = self.project_dir.resolve()
 
         self.modules = modules
         self.model = model
@@ -137,11 +137,12 @@ class Retriever:
             "modules": list(self.modules),
             "created": self.created,
             "project_dir": str(self.project_dir.as_posix()),
+            "preprocess_name": self.preprocess.name,
         }
         with (self.database_path / "config.json").open("w") as f:
             json.dump(config, f, indent=4)
 
-    def create_vectorstore(self):
+    def create_vectorstore(self, cache_preprocess=False):
         """Create a new Chroma vector store and ingest documents."""
 
         # for declaration in self.preprocess(list(self.modules), project_dir=self.project_dir):
@@ -160,7 +161,7 @@ class Retriever:
         )
 
         docs_queue = []
-        for declaration in self.preprocess(list(self.modules), project_dir=self.project_dir):
+        for declaration in self.preprocess(self.modules, cache=cache_preprocess):
             declaration = self.retrieval_preprocess(declaration)
             if type(declaration) is str:
                 docs_queue.append(
@@ -221,8 +222,8 @@ class Retriever:
         results = retriever.invoke(query)
         return results
 
-if __name__ == "__main__":
-    retriever = Retriever(
-        modules=("Mathlib.Algebra.Group",),
-        model="hanwenzhu/all-distilroberta-v1-lr2e-4-bs256-nneg3-ml-mar13",
-    )
+# if __name__ == "__main__":
+#     retriever = Retriever(
+#         modules=("Mathlib.Algebra.Group",),
+#         model="hanwenzhu/all-distilroberta-v1-lr2e-4-bs256-nneg3-ml-mar13",
+#     )

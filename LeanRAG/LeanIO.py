@@ -1,9 +1,7 @@
 import asyncio
 import json
-import os
 import shutil
 import subprocess
-from subprocess import SubprocessError
 
 import requests
 from pathlib import Path
@@ -113,7 +111,7 @@ def check_leanRAG_installation(
                 "\n[[require]]\n"
                 f'name = "LeanRAG"\n'
                 f'git  = "{git_url}"\n'
-                f'rev  = "{rev}"\n'
+                f'rev  = "{lean_version}"\n'
             )
             toml_file.write_text(text + snippet, encoding="utf-8")
 
@@ -121,7 +119,7 @@ def check_leanRAG_installation(
         text = lean_file.read_text(encoding="utf-8")
         if "require" not in text or "LeanRAG" not in text:
             snippet = (
-                f'\nrequire LeanRAG from git "{git_url}" @ "{rev}"\n'
+                f'\nrequire LeanRAG from git "{git_url}" @ "{lean_version}"\n'
             )
             # Insert after the last existing `require` (or at EOF).
             insert_at = text.rfind("require ") #TODO: make sure it's not in a comment
@@ -130,7 +128,6 @@ def check_leanRAG_installation(
             else:
                 head, tail = text[: insert_at].rstrip(), text[insert_at:]
                 lean_file.write_text(f"{head}\n{snippet}{tail}", encoding="utf-8")
-            added_dep = True
     else:
         raise FileNotFoundError(
             f"Neither lakefile.toml nor lakefile.lean found in {project_dir}"
@@ -174,8 +171,30 @@ def check_leanRAG_installation(
             text=True,
         )
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(exc.stderr or str(exc)) from exc
+        print("Quick rebuild failed. Erasing and rebuilding your .lake directory (this may take a minute)...")
+        try:
+            shutil.rmtree(project_dir / ".lake")
 
+            subprocess.run(
+                ["lake", "exe", "cache", "get"],
+                cwd=project_dir,
+                check=False,
+                text=True,
+            )
+            subprocess.run(
+                ["lake", "build"],
+                cwd=project_dir,
+                check=True,
+                text=True,
+            )
+            subprocess.run(
+                ["lake", "build", "LeanRAG"],
+                cwd=project_dir,
+                check=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(exc.stderr or str(exc)) from exc
 
 def get_leanrag_branch_commit(
     branch: str,
@@ -294,6 +313,3 @@ def get_leanrag_tag_commit(
                     break
 
     raise ValueError(f"No tag matching version '{version}' found in {repo!r}")
-
-# if __name__ == "__main__":
-#     print(get_leanrag_branch_commit("4.20.0"))
