@@ -87,8 +87,9 @@ class Client:
             if gpus == 0:
                 raise RuntimeError("No GPUs detected on CUDA. Make sure this task has access to properly configured GPUs.")
             os.environ["NCCL_P2P_DISABLE"] = "1"
-            ray.init(num_cpus=cpus, num_gpus=gpus)
+            ray.init(num_cpus=cpus, num_gpus=gpus, _tmp_dir='~/ray_tmp')
             DataContext.get_current().wait_for_min_actors_s = 1800
+            ctx = DataContext.get_current()
 
             config = vLLMEngineProcessorConfig(
                 model_source=model_name,
