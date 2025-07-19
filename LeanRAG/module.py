@@ -20,7 +20,7 @@ SEARCH_PATH_ENTRIES = [
     ".lake/packages/*/"
 ]
 
-LOG = True
+LOG = False
 SKIP_CACHE_REBUILD = False
 
 
@@ -305,6 +305,7 @@ class BatchedRetrievalOperation:
     def __call__(self, module : Module, decl_name, attr, *args, **kwargs):
         assert attr not in ["module", "name"], "Attributes 'module' and 'name' are reserved and cannot be used."
         top = module.get_toplevel()
+        # print("ALL MODULES:", [f.name for f in top.all_files()])
         # if not self._already_processed(module.name, [attr]):
         #     self._populate(top, *args, **kwargs)
 
@@ -729,17 +730,18 @@ def symbolic_theorem_data(modules : list[Module]):
 # - Streaming to batch inference
 
 @BatchedRetrievalOperation
-def informalized_theorems(modules : list[Module]):
+def informalized_theorems(modules : list[Module] | list['RestrictedModule']):
     from .agent_boilerplate import Client
     from .informalize_utils import make_prompt, process_response
-    # client = Client(
-    #     model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
-    #     model_source="ray"
-    # )
     client = Client(
-        model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-        model_source="test"
+        model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+        model_source="ray"
     )
+    # client = Client(
+    #     model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    #     model_source="test"
+    # )
+
     theorems = [thm for m in modules for thm in m.declarations()]
     prompts = [make_prompt(thm.src) for thm in theorems]
 
@@ -753,7 +755,51 @@ def informalized_theorems(modules : list[Module]):
             warnings.warn(f"Failed to informalize theorem {thm.name} in module {thm.module.name}.")
         yield {"name": thm.name, "module": thm.module.name, "informal_statement": statement, "informal_proof": proof}
 
+class RestrictedModule(Module):
+    def __init__(self, whitelisted_declarations, dataset : 'Dataset', name="", lean_dir=Path.cwd(), _module_path=None):
+        """ whitelisted_declarations should be just literal names with no namespace prefixes, etc. """
+        super().__init__(name=name, lean_dir=lean_dir, _module_path=_module_path)
+        self.whitelisted_declarations = whitelisted_declarations
+        self.dataset = dataset
+        assert self.dataset is not None
 
+    def declarations(self, theorems_only=False):
+        for decl in super().declarations(theorems_only=theorems_only):
+            if decl.name in self.whitelisted_declarations or not self.whitelisted_declarations:
+                yield decl
+
+    def get_toplevel(self):
+        return self.dataset
+
+    def get_parent(self):
+        if len(self.name_path) == 1:
+            return self.dataset
+        parent_name = ".".join(self.name_path[:-1])
+        return RestrictedModule([], self.dataset, parent_name, lean_dir=self.lean_dir)
+
+    def __getitem__(self, item):
+        raise NotImplementedError #TODO
+
+def restricted_module_from_path(path, whitelisted_declarations : list[str], dataset, lean_dir=Path.cwd()):
+    """Create a RestrictedModule from a path. If a path is given, it will be checked for existence; if a string/relative path is given, will search for the Lean file in the project directory."""
+    if type(path) is str:
+        path = search_for_lean_file(path, lean_dir=lean_dir)
+    if not path.exists():
+        raise ValueError(f"Path {path} does not exist.")
+    if lean_dir is None:
+        lean_root = path
+        while not (lean_root / "lakefile.toml").exists() and not (lean_root / "lakefile.lean").exists():
+            if lean_root.parent == lean_root:
+                raise ValueError(f"Could not find Lean project root for path {path}.")
+            lean_root = lean_root.parent
+    else:
+        if type(lean_dir) is str:
+            lean_root = Path(lean_dir)
+        else:
+            lean_root = lean_dir
+        if not (lean_root / "lakefile.toml").exists() and not (lean_root / "lakefile.lean").exists():
+            raise ValueError(f"{lean_root} is not a Lean project root.")
+    return RestrictedModule(whitelisted_declarations, dataset, lean_dir=lean_root, _module_path=path)
 
 class Declaration:
     # TODO: maybe include intermediate proof states, separate out ProofAsSorry-able stuff from things that need full proof
@@ -779,7 +825,7 @@ class Declaration:
         return str(self.module) + "." + self.name
 
     def __getattribute__(self, item):
-        if item in ["name", "declaration_name", "module"]:
+        if item in ["name", "module"]:
             return object.__getattribute__(self, item)
 
         elif item in ["kind", "src"]:
@@ -789,7 +835,9 @@ class Declaration:
                 # if attrs is None:
                 #     # If that doesn't work, extract by processing plaintext instead
                 attrs = plaintext_declarations(self.module, self.name, item)
-                assert "kind" in attrs and "src" in attrs, "Should never print"
+                if "kind" not in attrs or "src" not in attrs:
+                    warnings.warn(f"Declaration {self.name} in module {self.module.name} does not have all attributes. Some may be missing.")
+                    return ""
                 for attr in attrs:
                     if attr != "dependencies":
                         object.__setattr__(self, attr, attrs[attr])
@@ -822,7 +870,21 @@ class Declaration:
                                     # TODO: is there a way around this without just ignoring them?
                                     continue
                                 try:
-                                    deps.append(Declaration(a["name"], Module(a["module"], lean_dir=self.module.lean_dir)))
+                                    deps.append(
+                                        Declaration(
+                                            a["name"].split(".")[-1],  # Get the last part of the name, i.e. without namespaces
+                                            # Module(
+                                            #     a["module"],
+                                            #     lean_dir=self.module.lean_dir
+                                            # )
+                                            RestrictedModule(
+                                                [a["name"].split(".")[-1]],
+                                                self.module.get_toplevel(),
+                                                name=a["module"],
+                                                lean_dir=self.module.lean_dir
+                                            )
+                                        )
+                                    )
                                 except ModuleNotFoundError:
                                     pass
                             object.__setattr__(self, "dependencies", deps)
@@ -837,7 +899,10 @@ class Declaration:
         elif item in ["informal_statement", "informal_proof"]:
             if object.__getattribute__(self, item) is None:
                 attrs = informalized_theorems(self.module, self.name, item)
-                assert "informal_statement" in attrs and "informal_proof" in attrs, f"the data for {self.name} was not found in the database for {self.module.name}"
+                # assert "informal_statement" in attrs and "informal_proof" in attrs, f"the data for {self.name} was not found in the database for {self.module.name}"
+                if "informal_statement" not in attrs or "informal_proof" not in attrs:
+                    warnings.warn(f"Declaration {self.name} in module {self.module.name} does not have all attributes. Some may be missing.")
+                    return ""
                 for attr in attrs:
                     if attr != "dependencies":
                         object.__setattr__(self, attr, attrs[attr])

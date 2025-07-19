@@ -2,53 +2,9 @@ from pathlib import Path
 import json
 
 from .LeanIO import check_leanRAG_installation, run_lean_command_sync
-from .module import Module, Declaration, module_from_path, search_for_lean_file
+from .module import Module, Declaration, module_from_path, search_for_lean_file, RestrictedModule, restricted_module_from_path
 
 
-class RestrictedModule(Module):
-    def __init__(self, whitelisted_declarations, dataset : 'Dataset', name="", lean_dir=Path.cwd(), _module_path=None):
-        """ whitelisted_declarations should be just literal names with no namespace prefixes, etc. """
-        super().__init__(name=name, lean_dir=lean_dir, _module_path=_module_path)
-        self.whitelisted_declarations = whitelisted_declarations
-        self.dataset = dataset
-
-    def declarations(self, theorems_only=False):
-        for decl in super().declarations(theorems_only=theorems_only):
-            if decl.name in self.whitelisted_declarations or not self.whitelisted_declarations:
-                yield decl
-
-    def get_toplevel(self):
-        return self.dataset
-
-    def get_parent(self):
-        if len(self.name_path) == 1:
-            return self.dataset
-        parent_name = ".".join(self.name_path[:-1])
-        return RestrictedModule([], self.dataset, parent_name, lean_dir=self.lean_dir)
-
-    def __getitem__(self, item):
-        raise NotImplementedError #TODO
-
-def restricted_module_from_path(path, whitelisted_declarations : list[str], dataset, lean_dir=Path.cwd()):
-    """Create a RestrictedModule from a path. If a path is given, it will be checked for existence; if a string/relative path is given, will search for the Lean file in the project directory."""
-    if type(path) is str:
-        path = search_for_lean_file(path, lean_dir=lean_dir)
-    if not path.exists():
-        raise ValueError(f"Path {path} does not exist.")
-    if lean_dir is None:
-        lean_root = path
-        while not (lean_root / "lakefile.toml").exists() and not (lean_root / "lakefile.lean").exists():
-            if lean_root.parent == lean_root:
-                raise ValueError(f"Could not find Lean project root for path {path}.")
-            lean_root = lean_root.parent
-    else:
-        if type(lean_dir) is str:
-            lean_root = Path(lean_dir)
-        else:
-            lean_root = lean_dir
-        if not (lean_root / "lakefile.toml").exists() and not (lean_root / "lakefile.lean").exists():
-            raise ValueError(f"{lean_root} is not a Lean project root.")
-    return RestrictedModule(whitelisted_declarations, dataset, lean_dir=lean_root, _module_path=path)
 
 class Dataset:
     def __init__(self, dataset_json, split="train", name="", lean_dir=Path.cwd(), include_dependencies=False):
@@ -81,21 +37,26 @@ class Dataset:
                         prefix = dep.module.name.split(".")[0]
                         if prefix not in dataset_extended[self.split]:
                             dataset_extended[self.split][prefix] = []
+
                         module_path = dep.module.rel_path()
                         has_found = False
+
                         for existing_dep in dataset_extended[self.split][prefix]:
                             if existing_dep == module_path:
                                 has_found = True
                                 break
                             elif type(existing_dep) is dict and existing_dep.get("file", "") == module_path:
                                 has_found = True
-                                existing_dep["theorems"].append(decl.name)
+                                if dep.name not in existing_dep["theorems"]:
+                                    existing_dep["theorems"].append(dep.name)
                                 break
+
                         if not has_found:
                             dataset_extended[self.split][prefix].append({
                                 "file": module_path,
-                                "theorems": [decl.name]
+                                "theorems": [dep.name]
                             })
+
             self.include_dependencies = True
             self.dataset_extended = Dataset(dataset_extended, split=self.split, name=f"{self.name}_dependencies", lean_dir=self.lean_dir, include_dependencies=False)
 
