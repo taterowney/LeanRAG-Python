@@ -1,3 +1,7 @@
+# A bit overkill, I copy/pasted this from another project of mine
+
+
+
 # TODOs:
 #  - repetition by variable amounts
 #  - load lazily from a text iterator
@@ -515,7 +519,7 @@ class Delimiters(Pattern):
 #
 #
 #     """
-#     # TODO: no lines between theorems, "where" declarations
+#     # TODO: no lines between theorems, "where" declarations, fails if last thing is a theorem
 #     # pat = ((Literal("theorem") | "lemma" | "problem" | "def").extract("kind") + Word().extract("name") + Any() + ":=" + Any() + "\n" + Repetition(Literal("  ") + Any() + "\n", min_num=0) + "\n").extract("src")
 #
 #     pat = "\n" + Repetition(Literal("  ") + Any() + "\n", min_num=0).extract() + "\n"
